@@ -27,12 +27,20 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # CORS
-    CORS_ORIGINS: list = ["*"]
+    CORS_ORIGINS: list = ["http://localhost:3000"]
     
     # Admin credentials (for initial setup)
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
     ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@campustamizha.com")
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "changeme123")
+    
+    # Logging
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "true").lower() == "true"
+    LOG_SQL_QUERIES: bool = os.getenv("LOG_SQL_QUERIES", "false").lower() == "true"
+
+    #application status
+    APPLICATION_STATUS_OPTIONS: list = ["pending", "under_review", "accepted", "rejected"]
 
 
 settings = Settings()

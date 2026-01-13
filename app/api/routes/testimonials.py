@@ -16,7 +16,7 @@ router = APIRouter(prefix="/testimonials", tags=["Testimonials"])
 @router.get("/", response_model=List[TestimonialResponse])
 async def list_testimonials(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10,
     active_only: bool = True,
     session: AsyncSession = Depends(get_session)
 ):

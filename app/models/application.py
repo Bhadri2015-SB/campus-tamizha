@@ -21,7 +21,7 @@ class Application(Base):
     course = Column(String(255), nullable=False)
     admission_year = Column(Integer, nullable=False)
     notes = Column(Text, nullable=True)
-    status = Column(String(50), default="pending", nullable=False)  # pending, approved, rejected
+    status = Column(String(50), default="pending", nullable=False)  # pending, in_progress, approved, rejected
     admin_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

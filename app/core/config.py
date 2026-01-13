@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=env_file_map.get(env_type, ".env.dev"))
 
 class Settings:
     # Application
-    APP_NAME: str = "campus Tamizha"
+    APP_NAME: str = "Campus Tamizha"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     

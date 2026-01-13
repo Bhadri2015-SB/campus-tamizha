@@ -32,13 +32,34 @@ async def create_application(session: AsyncSession, application_data: dict) -> A
 async def get_applications(
     session: AsyncSession, 
     skip: int = 0, 
-    limit: int = 100
+    limit: int = 10,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    name: Optional[str] = None
 ) -> List[Application]:
-    """Get all applications with pagination"""
+    """Get all applications with pagination, sorting, and filtering"""
     try:
-        statement = select(Application).offset(skip).limit(limit)
+        statement = select(Application)
+        
+        # Apply name filter if provided
+        if name:
+            statement = statement.where(Application.name.ilike(f"%{name}%"))
+        
+        # Apply sorting
+        sort_column = getattr(Application, sort_by, Application.created_at)
+        if order == "desc":
+            statement = statement.order_by(sort_column.desc())
+        else:
+            statement = statement.order_by(sort_column.asc())
+        
+        # Apply pagination
+        statement = statement.offset(skip).limit(limit)
+        
         result = await session.execute(statement)
         return result.scalars().all()
+    except AttributeError as e:
+        logger.error(f"Invalid sort field: {sort_by}")
+        raise ValueError(f"Invalid sort field: {sort_by}")
     except SQLAlchemyError as e:
         logger.error(f"Error fetching applications: {str(e)}")
         raise
@@ -114,7 +135,7 @@ async def create_college(session: AsyncSession, college_data: dict) -> College:
 async def get_colleges(
     session: AsyncSession,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10,
     active_only: bool = True
 ) -> List[College]:
     """Get all colleges with pagination and optional active filter"""
@@ -221,7 +242,7 @@ async def create_testimonial(session: AsyncSession, testimonial_data: dict) -> T
 async def get_testimonials(
     session: AsyncSession,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10,
     active_only: bool = True
 ) -> List[Testimonial]:
     """Get all testimonials with pagination and optional active filter"""

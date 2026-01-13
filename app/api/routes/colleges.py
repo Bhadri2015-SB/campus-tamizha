@@ -16,7 +16,7 @@ router = APIRouter(prefix="/colleges", tags=["Colleges"])
 @router.get("/", response_model=List[CollegeResponse])
 async def list_colleges(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10,
     active_only: bool = True,
     session: AsyncSession = Depends(get_session)
 ):

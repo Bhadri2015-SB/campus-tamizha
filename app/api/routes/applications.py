@@ -46,13 +46,35 @@ async def create_application(
 @router.get("/", response_model=List[ApplicationResponse])
 async def list_applications(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    name: str = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_superuser)
 ):
-    """List all applications (admin only)"""
+    """List all applications (admin only) with sorting and filtering
+    
+    Args:
+        skip: Number of records to skip (offset)
+        limit: Maximum number of records to return
+        sort_by: Field to sort by (id, name, email, city, status, created_at, etc.)
+        order: Sort order (asc or desc)
+        name: Filter by name (partial match, case-insensitive)
+    """
     try:
-        return await db_crud.get_applications(session, skip, limit)
+        # Validate sort order
+        if order not in ["asc", "desc"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Order must be 'asc' or 'desc'"
+            )
+        
+        return await db_crud.get_applications(
+            session, skip, limit, sort_by, order, name
+        )
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
         logger.error(f"Database error while listing applications: {str(e)}")
         raise HTTPException(

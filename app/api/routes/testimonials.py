@@ -13,6 +13,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/testimonials", tags=["Testimonials"])
 
 
+@router.post("/", response_model=TestimonialResponse)
+async def create_testimonial(
+    testimonial_data: TestimonialBase,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_superuser)
+):
+    """Create a new testimonial (admin only)"""
+    try:
+        return await db_crud.create_testimonial(session, testimonial_data.model_dump())
+    except IntegrityError as e:
+        logger.error(f"Database integrity error while creating testimonial: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Testimonial data violates database constraints"
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while creating testimonial: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while creating testimonial"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error while creating testimonial: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )
+
+
 @router.get("/", response_model=List[TestimonialResponse])
 async def list_testimonials(
     skip: int = 0,

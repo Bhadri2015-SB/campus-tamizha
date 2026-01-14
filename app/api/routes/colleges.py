@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from pydantic import BaseModel
 from app.db.database import get_session
 from app.core.deps import get_current_superuser
 from app.models.user import User
@@ -13,16 +14,48 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/colleges", tags=["Colleges"])
 
 
-@router.get("/", response_model=List[CollegeResponse])
+class PaginatedCollegeResponse(BaseModel):
+    """Paginated response for colleges"""
+    items: List[CollegeResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+@router.get("/", response_model=PaginatedCollegeResponse)
 async def list_colleges(
-    skip: int = 0,
-    limit: int = 10,
-    active_only: bool = True,
+    page: int = Query(1, ge=1, description="Page number (starts from 1)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    search: Optional[str] = Query(None, description="Search by college name"),
+    active_only: bool = Query(True, description="Show only active colleges"),
     session: AsyncSession = Depends(get_session)
 ):
-    """List all colleges"""
+    """List all colleges with pagination and name search"""
     try:
-        return await db_crud.get_colleges(session, skip, limit, active_only)
+        # Calculate skip based on page
+        skip = (page - 1) * page_size
+        
+        # Fetch colleges with filters
+        colleges, total = await db_crud.get_colleges(
+            session=session,
+            skip=skip,
+            limit=page_size,
+            active_only=active_only,
+            search=search
+        )
+        
+        # Calculate total pages
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        
+        return PaginatedCollegeResponse(
+            items=colleges,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages
+        )
+        
     except SQLAlchemyError as e:
         logger.error(f"Database error while listing colleges: {str(e)}")
         raise HTTPException(

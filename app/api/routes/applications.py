@@ -7,7 +7,7 @@ from app.db.database import get_session
 from app.core.deps import get_current_user, get_current_superuser
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.api_schemas import ApplicationCreate, ApplicationResponse
+from app.schemas.api_schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate
 from app.services import db_crud
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,7 @@ async def get_application(
 
 
 @router.patch("/{application_id}", response_model=ApplicationResponse)
-async def update_application(
+async def update_application_status(
     application_id: int,
     status_update: str,
     admin_notes: str = None,
@@ -156,6 +156,83 @@ async def update_application(
         )
     except Exception as e:
         logger.error(f"Unexpected error while updating application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )
+
+
+@router.put("/{application_id}", response_model=ApplicationResponse)
+async def update_application_data(
+    application_id: int,
+    update_data: ApplicationUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_superuser)
+):
+    """Update full application data (admin only)
+    
+    Frontend passes the entire application object with all fields.
+    Updates all provided fields in the application including:
+    - Personal info: name, email, mobile, city, dob, gender
+    - Academic info: qualification, board, year, percentage
+    - College info: college, course, admission_year
+    - Notes and status: notes, status, admin_notes
+    """
+    try:
+        logger.info(f"Admin {current_user.email} attempting to update application {application_id}")
+        
+        # Convert Pydantic model to dict, excluding unset values
+        update_dict = update_data.model_dump(exclude_unset=True)
+        
+        if not update_dict:
+            logger.warning(f"No data provided for updating application {application_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No data provided for update"
+            )
+        
+        logger.debug(f"Update data for application {application_id}: {update_dict}")
+        
+        # Validate status if provided
+        if "status" in update_dict and update_dict["status"] not in settings.APPLICATION_STATUS_OPTIONS:
+            logger.warning(f"Invalid status '{update_dict['status']}' provided for application {application_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(settings.APPLICATION_STATUS_OPTIONS)}"
+            )
+        
+        # Call database function to update application
+        application = await db_crud.update_application(
+            session, application_id, update_dict
+        )
+        
+        if not application:
+            logger.warning(f"Application {application_id} not found for update")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+        
+        logger.info(f"Successfully updated application {application_id} by admin {current_user.email}")
+        return application
+        
+    except HTTPException as e:
+        logger.error(f"HTTP error while updating application {application_id}: {e.status_code} - {e.detail}")
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while updating application {application_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while updating application"
+        )
+    except ValueError as e:
+        logger.error(f"Validation error while updating application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error while updating application {application_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred"

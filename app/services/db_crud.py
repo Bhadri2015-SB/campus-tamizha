@@ -113,6 +113,54 @@ async def update_application_status(
         raise
 
 
+async def update_application(
+    session: AsyncSession,
+    application_id: int,
+    update_data: dict
+) -> Optional[Application]:
+    """Update application with full data from frontend"""
+    try:
+        logger.info(f"Attempting to update application {application_id}")
+        
+        application = await session.get(Application, application_id)
+        if not application:
+            logger.warning(f"Application {application_id} not found for update")
+            return None
+        
+        logger.debug(f"Current application data: {application.__dict__}")
+        
+        # Update all provided fields
+        updated_fields = []
+        for field, value in update_data.items():
+            if hasattr(application, field):
+                old_value = getattr(application, field)
+                if old_value != value:
+                    setattr(application, field, value)
+                    updated_fields.append(field)
+                    logger.debug(f"Updated field '{field}': {old_value} -> {value}")
+        
+        if not updated_fields:
+            logger.info(f"No fields changed for application {application_id}")
+        else:
+            logger.info(f"Updated fields for application {application_id}: {', '.join(updated_fields)}")
+        
+        session.add(application)
+        await session.commit()
+        await session.refresh(application)
+        
+        logger.info(f"Successfully updated application {application_id}")
+        return application
+        
+    except SQLAlchemyError as e:
+        await session.rollback()
+        logger.error(f"Database error while updating application {application_id}: {str(e)}", exc_info=True)
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Unexpected error while updating application {application_id}: {str(e)}", exc_info=True)
+        raise
+
+
 # College CRUD Operations
 async def create_college(session: AsyncSession, college_data: dict) -> College:
     """Create a new college"""
@@ -136,16 +184,44 @@ async def get_colleges(
     session: AsyncSession,
     skip: int = 0,
     limit: int = 10,
-    active_only: bool = True
-) -> List[College]:
-    """Get all colleges with pagination and optional active filter"""
+    active_only: bool = True,
+    search: Optional[str] = None
+) -> tuple[List[College], int]:
+    """Get all colleges with pagination and name search
+    
+    Returns:
+        tuple: (list of colleges, total count)
+    """
     try:
+        # Build base query
         statement = select(College)
+        count_statement = select(College)
+        
+        # Apply active filter
         if active_only:
             statement = statement.where(College.active == True)
-        statement = statement.offset(skip).limit(limit)
+            count_statement = count_statement.where(College.active == True)
+        
+        # Apply search filter (searches in college name only)
+        if search:
+            search_filter = f"%{search}%"
+            statement = statement.where(College.name.ilike(search_filter))
+            count_statement = count_statement.where(College.name.ilike(search_filter))
+        
+        # Get total count
+        from sqlalchemy import func
+        count_result = await session.execute(select(func.count()).select_from(count_statement.subquery()))
+        total = count_result.scalar()
+        
+        # Apply pagination and ordering
+        statement = statement.order_by(College.name.asc()).offset(skip).limit(limit)
+        
+        # Execute query
         result = await session.execute(statement)
-        return result.scalars().all()
+        colleges = result.scalars().all()
+        
+        return colleges, total
+        
     except SQLAlchemyError as e:
         logger.error(f"Error fetching colleges: {str(e)}")
         raise

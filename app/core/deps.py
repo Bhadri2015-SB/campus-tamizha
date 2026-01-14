@@ -25,15 +25,15 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    username: str = payload.get("sub")
-    if username is None:
+    email: str = payload.get("sub")
+    if email is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    statement = select(User).where(User.username == username)
+    statement = select(User).where(User.email == email)
     result = await session.execute(statement)
     user = result.scalar_one_or_none()
     

@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, JSON
 from sqlalchemy.orm import relationship
 from app.models.user import Base
+
+# IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class Application(Base):
@@ -24,8 +27,8 @@ class Application(Base):
     notes = Column(Text, nullable=True)
     status = Column(String(50), default="pending", nullable=False)  # pending, in_progress, approved, rejected
     admin_notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(IST), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(IST), onupdate=lambda: datetime.now(IST), nullable=False)
     
     # Relationship to status history
     status_history = relationship("ApplicationStatusHistory", back_populates="application", cascade="all, delete-orphan")

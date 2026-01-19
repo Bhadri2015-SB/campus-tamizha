@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from app.models.user import Base
+
+# IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class ApplicationStatusHistory(Base):
@@ -13,7 +16,7 @@ class ApplicationStatusHistory(Base):
     admin_email = Column(String(255), nullable=False)  # Email of admin who made the change
     admin_name = Column(String(255), nullable=True)  # Name of admin (optional)
     notes = Column(Text, nullable=True)  # Admin notes about the status change
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(IST), nullable=False)
     
     # Relationship to Application
     application = relationship("Application", back_populates="status_history")

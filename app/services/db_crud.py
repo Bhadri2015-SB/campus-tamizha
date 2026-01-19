@@ -1,9 +1,11 @@
 from typing import List, Optional
 import logging
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from app.models.application import Application
+from app.models.application_status_history import ApplicationStatusHistory
 from app.models.college import College
 from app.models.testimonial import Testimonial
 
@@ -35,15 +37,53 @@ async def get_applications(
     limit: int = 10,
     sort_by: str = "created_at",
     order: str = "desc",
-    name: Optional[str] = None
+    name: Optional[str] = None,
+    location: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
 ) -> List[Application]:
-    """Get all applications with pagination, sorting, and filtering"""
+    """Get all applications with pagination, sorting, and filtering
+    
+    Args:
+        session: Database session
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        sort_by: Field to sort by
+        order: Sort order (asc or desc)
+        name: Filter by name (partial match)
+        location: Filter by city/location (exact match)
+        start_date: Filter from date (format: YYYY-MM-DD)
+        end_date: Filter until date (format: YYYY-MM-DD)
+    """
     try:
         statement = select(Application)
         
         # Apply name filter if provided
         if name:
             statement = statement.where(Application.name.ilike(f"%{name}%"))
+        
+        # Apply location filter if provided
+        if location:
+            statement = statement.where(Application.city.ilike(f"%{location}%"))
+        
+        # Apply date range filters if provided
+        if start_date:
+            try:
+                start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+                statement = statement.where(Application.created_at >= start_datetime)
+            except ValueError:
+                logger.error(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
+                raise ValueError(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
+        
+        if end_date:
+            try:
+                end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
+                # Set to end of day
+                end_datetime = end_datetime.replace(hour=23, minute=59, second=59)
+                statement = statement.where(Application.created_at <= end_datetime)
+            except ValueError:
+                logger.error(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
+                raise ValueError(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
         
         # Apply sorting
         sort_column = getattr(Application, sort_by, Application.created_at)
@@ -60,6 +100,9 @@ async def get_applications(
     except AttributeError as e:
         logger.error(f"Invalid sort field: {sort_by}")
         raise ValueError(f"Invalid sort field: {sort_by}")
+    except ValueError as e:
+        logger.error(f"Validation error in get_applications: {str(e)}")
+        raise
     except SQLAlchemyError as e:
         logger.error(f"Error fetching applications: {str(e)}")
         raise
@@ -400,4 +443,56 @@ async def delete_testimonial(
     except Exception as e:
         await session.rollback()
         logger.error(f"Unexpected error deleting testimonial {testimonial_id}: {str(e)}")
+        raise
+
+
+# Application Status History CRUD Operations
+async def create_status_history(
+    session: AsyncSession,
+    application_id: int,
+    status: str,
+    admin_email: str,
+    admin_name: str = None,
+    notes: str = None
+) -> ApplicationStatusHistory:
+    """Create a new status history entry"""
+    try:
+        status_history = ApplicationStatusHistory(
+            application_id=application_id,
+            status=status,
+            admin_email=admin_email,
+            admin_name=admin_name,
+            notes=notes
+        )
+        session.add(status_history)
+        await session.commit()
+        await session.refresh(status_history)
+        return status_history
+    except SQLAlchemyError as e:
+        await session.rollback()
+        logger.error(f"Error creating status history: {str(e)}")
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Unexpected error creating status history: {str(e)}")
+        raise
+
+
+async def get_application_status_history(
+    session: AsyncSession,
+    application_id: int
+) -> List[ApplicationStatusHistory]:
+    """Get all status history for an application"""
+    try:
+        statement = select(ApplicationStatusHistory).where(
+            ApplicationStatusHistory.application_id == application_id
+        ).order_by(ApplicationStatusHistory.created_at.desc())
+        
+        result = await session.execute(statement)
+        return result.scalars().all()
+    except SQLAlchemyError as e:
+        logger.error(f"Error fetching status history for application {application_id}: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error fetching status history for application {application_id}: {str(e)}")
         raise

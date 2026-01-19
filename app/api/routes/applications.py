@@ -7,7 +7,13 @@ from app.db.database import get_session
 from app.core.deps import get_current_user, get_current_superuser
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.api_schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate
+from app.schemas.api_schemas import (
+    ApplicationCreate, 
+    ApplicationResponse, 
+    ApplicationUpdate,
+    ApplicationStatusHistoryCreate,
+    ApplicationStatusHistoryResponse
+)
 from app.services import db_crud
 
 logger = logging.getLogger(__name__)
@@ -50,6 +56,9 @@ async def list_applications(
     sort_by: str = "created_at",
     order: str = "desc",
     name: str = None,
+    location: str = None,
+    start_date: str = None,
+    end_date: str = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_superuser)
 ):
@@ -61,6 +70,9 @@ async def list_applications(
         sort_by: Field to sort by (id, name, email, city, status, created_at, etc.)
         order: Sort order (asc or desc)
         name: Filter by name (partial match, case-insensitive)
+        location: Filter by city/location (exact match, case-insensitive)
+        start_date: Filter applications from this date (format: YYYY-MM-DD)
+        end_date: Filter applications until this date (format: YYYY-MM-DD)
     """
     try:
         # Validate sort order
@@ -71,7 +83,7 @@ async def list_applications(
             )
         
         return await db_crud.get_applications(
-            session, skip, limit, sort_by, order, name
+            session, skip, limit, sort_by, order, name, location, start_date, end_date
         )
     except HTTPException:
         raise
@@ -124,12 +136,19 @@ async def get_application(
 async def update_application_status(
     application_id: int,
     status_update: str,
+    admin_name: str = None,
     admin_notes: str = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_superuser)
 ):
-    """Update application status (admin only)"""
+    """Update application status (admin only)
+    
+    Updates the application status and automatically creates a status history entry
+    to track the change with admin details and timestamp.
+    """
     try:
+        logger.info(f"Admin {current_user.email} updating status for application {application_id}")
+        
         # Validate status is from allowed options
         if status_update not in settings.APPLICATION_STATUS_OPTIONS:
             raise HTTPException(
@@ -137,25 +156,43 @@ async def update_application_status(
                 detail=f"Invalid status. Must be one of: {', '.join(settings.APPLICATION_STATUS_OPTIONS)}"
             )
         
-        application = await db_crud.update_application_status(
-            session, application_id, status_update, admin_notes
-        )
+        # Verify application exists
+        application = await db_crud.get_application_by_id(session, application_id)
         if not application:
+            logger.warning(f"Application {application_id} not found")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Application not found"
             )
+        
+        # Create status history entry
+        await db_crud.create_status_history(
+            session=session,
+            application_id=application_id,
+            status=status_update,
+            admin_email=current_user.email,
+            admin_name=admin_name,
+            notes=admin_notes
+        )
+        
+        # Update the application's current status
+        application = await db_crud.update_application_status(
+            session, application_id, status_update, admin_notes
+        )
+        
+        logger.info(f"Successfully updated application {application_id} status to {status_update}")
         return application
+        
     except HTTPException:
         raise
     except SQLAlchemyError as e:
-        logger.error(f"Database error while updating application {application_id}: {str(e)}")
+        logger.error(f"Database error while updating application {application_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error occurred while updating application"
         )
     except Exception as e:
-        logger.error(f"Unexpected error while updating application {application_id}: {str(e)}")
+        logger.error(f"Unexpected error while updating application {application_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred"
@@ -239,3 +276,50 @@ async def update_application_data(
         )
 
 
+@router.get("/{application_id}/status-history", response_model=List[ApplicationStatusHistoryResponse])
+async def get_status_history(
+    application_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_superuser)
+):
+    """Get all status history for an application (admin only)
+    
+    Returns a list of all status changes for the application,
+    ordered from newest to oldest. Each entry includes:
+    - Status value
+    - Admin who made the change
+    - Notes about the change
+    - Timestamp
+    """
+    try:
+        logger.info(f"Admin {current_user.email} fetching status history for application {application_id}")
+        
+        # Verify application exists
+        application = await db_crud.get_application_by_id(session, application_id)
+        if not application:
+            logger.warning(f"Application {application_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+        
+        # Get status history
+        history = await db_crud.get_application_status_history(session, application_id)
+        
+        logger.info(f"Successfully fetched {len(history)} status history entries for application {application_id}")
+        return history
+        
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching status history: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while fetching status history"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error while fetching status history: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )

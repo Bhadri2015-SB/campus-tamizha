@@ -28,7 +28,11 @@ class Settings:
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # CORS
-    CORS_ORIGINS: list = ["http://localhost:3000","http://localhost:5173"]
+    CORS_ORIGINS: list = [
+        origin.strip() 
+        for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+        if origin.strip()
+    ]
     
     # Admin credentials (for initial setup)
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")

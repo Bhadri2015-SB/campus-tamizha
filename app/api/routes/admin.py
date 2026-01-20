@@ -228,7 +228,6 @@ async def seed_database(
                          "Thiagarajar College of Engineering", "Coimbatore Institute of Technology"]
         courses_list = ["Computer Science Engineering", "Mechanical Engineering", "Electronics and Communication Engineering",
                         "Civil Engineering", "Electrical and Electronics Engineering", "Information Technology"]
-        statuses = ["pending", "in_progress", "approved", "rejected"]
         
         results["applications_added"] = 0
         results["applications_skipped"] = 0
@@ -268,8 +267,7 @@ async def seed_database(
                 college=selected_colleges,
                 course=selected_courses,
                 notes=f"Mock application {i+1} - Sample data for testing",
-                status=random.choice(statuses),
-                admin_notes=None if random.random() > 0.5 else "Sample admin note"
+                status="pending"
             )
             
             session.add(application)

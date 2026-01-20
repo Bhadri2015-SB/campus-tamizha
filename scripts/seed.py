@@ -283,7 +283,6 @@ async def seed_applications():
                      "Thiagarajar College of Engineering", "Coimbatore Institute of Technology"]
     courses_list = ["Computer Science Engineering", "Mechanical Engineering", "Electronics and Communication Engineering",
                     "Civil Engineering", "Electrical and Electronics Engineering", "Information Technology"]
-    statuses = ["pending", "in_progress", "approved", "rejected"]
     
     async with AsyncSessionLocal() as session:
         try:
@@ -332,8 +331,7 @@ async def seed_applications():
                     college=selected_colleges,
                     course=selected_courses,
                     notes=f"Mock application {i+1} - Sample data for testing",
-                    status=random.choice(statuses),
-                    admin_notes=None if random.random() > 0.5 else "Sample admin note"
+                    status="pending"
                 )
                 
                 session.add(application)

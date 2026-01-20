@@ -30,8 +30,8 @@ async def login(user_data: UserLogin, session: AsyncSession = Depends(get_sessio
                 detail="Inactive user"
             )
         
-        access_token = create_access_token(data={"sub": user.email})
-        refresh_token = create_refresh_token(data={"sub": user.email})
+        access_token = create_access_token(data={"sub": user.email, "username": user.username})
+        refresh_token = create_refresh_token(data={"sub": user.email, "username": user.username})
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
     except HTTPException:
         raise
@@ -87,8 +87,8 @@ async def refresh_token(token_data: RefreshTokenRequest, session: AsyncSession =
             )
         
         # Create new tokens
-        new_access_token = create_access_token(data={"sub": user.email})
-        new_refresh_token = create_refresh_token(data={"sub": user.email})
+        new_access_token = create_access_token(data={"sub": user.email, "username": user.username})
+        new_refresh_token = create_refresh_token(data={"sub": user.email, "username": user.username})
         
         return {
             "access_token": new_access_token,

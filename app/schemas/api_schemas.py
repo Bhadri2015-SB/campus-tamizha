@@ -10,13 +10,13 @@ class ApplicationCreate(BaseModel):
     city: str
     dob: str
     gender: str
-    qualification: str
+    sslc_percentage: float
+    hsc_percentage: float
+    school_name: str
+    district: str
     board: str
-    year: int
-    percentage: float
     college: List[str]
     course: List[str]
-    admission_year: int
     notes: str | None = None
     
     @field_validator('college', 'course')
@@ -39,16 +39,17 @@ class ApplicationUpdate(BaseModel):
     city: str | None = None
     dob: str | None = None
     gender: str | None = None
-    qualification: str | None = None
+    sslc_percentage: float | None = None
+    hsc_percentage: float | None = None
+    school_name: str | None = None
+    district: str | None = None
     board: str | None = None
-    year: int | None = None
-    percentage: float | None = None
     college: List[str] | None = None
     course: List[str] | None = None
-    admission_year: int | None = None
     notes: str | None = None
     status: str | None = None
     admin_notes: str | None = None
+    admin_name: str | None = None
     
     @field_validator('college', 'course')
     @classmethod
@@ -68,6 +69,7 @@ class ApplicationResponse(ApplicationCreate):
     id: int
     status: str
     admin_notes: str | None
+    admin_name: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 

@@ -23,6 +23,44 @@ class PaginatedCollegeResponse(BaseModel):
     total_pages: int
 
 
+class CollegeNameResponse(BaseModel):
+    """Simple response with just college name"""
+    name: str
+
+
+@router.get("/search", response_model=List[CollegeNameResponse])
+async def search_colleges(
+    q: str = Query(..., min_length=1, description="Search query for college name"),
+    session: AsyncSession = Depends(get_session)
+):
+    """Search colleges by name and return up to 8 college names"""
+    try:
+        # Fetch colleges with search filter, limited to 8 results
+        colleges, _ = await db_crud.get_colleges(
+            session=session,
+            skip=0,
+            limit=8,
+            active_only=True,
+            search=q
+        )
+        
+        # Return only college names
+        return [CollegeNameResponse(name=college.name) for college in colleges]
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while searching colleges: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while searching colleges"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error while searching colleges: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )
+
+
 @router.get("/", response_model=PaginatedCollegeResponse)
 async def list_colleges(
     page: int = Query(1, ge=1, description="Page number (starts from 1)"),

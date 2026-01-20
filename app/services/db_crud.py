@@ -130,9 +130,10 @@ async def update_application_status(
     session: AsyncSession,
     application_id: int,
     status_update: str,
-    admin_notes: Optional[str] = None
+    admin_notes: Optional[str] = None,
+    admin_name: Optional[str] = None
 ) -> Optional[Application]:
-    """Update application status and admin notes"""
+    """Update application status, admin notes, and admin name"""
     try:
         application = await session.get(Application, application_id)
         if not application:
@@ -141,6 +142,8 @@ async def update_application_status(
         application.status = status_update
         if admin_notes:
             application.admin_notes = admin_notes
+        if admin_name:
+            application.admin_name = admin_name
         
         session.add(application)
         await session.commit()

@@ -136,7 +136,6 @@ async def get_application(
 async def update_application_status(
     application_id: int,
     status_update: str,
-    admin_name: str = None,
     admin_notes: str = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_superuser)
@@ -165,19 +164,19 @@ async def update_application_status(
                 detail="Application not found"
             )
         
-        # Create status history entry
+        # Create status history entry with username from token
         await db_crud.create_status_history(
             session=session,
             application_id=application_id,
             status=status_update,
             admin_email=current_user.email,
-            admin_name=admin_name,
+            admin_name=current_user.username,
             notes=admin_notes
         )
         
         # Update the application's current status
         application = await db_crud.update_application_status(
-            session, application_id, status_update, admin_notes
+            session, application_id, status_update, admin_notes, current_user.username
         )
         
         logger.info(f"Successfully updated application {application_id} status to {status_update}")

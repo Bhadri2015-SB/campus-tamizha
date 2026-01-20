@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from app.api.routes import applications, auth, colleges, testimonials
+from app.api.routes import applications, auth, colleges, testimonials, admin
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.db.database import create_db_and_tables, close_db
@@ -165,6 +165,8 @@ app.include_router(colleges.router, prefix="/api")
 logger.info("Colleges router registered")
 app.include_router(testimonials.router, prefix="/api")
 logger.info("Testimonials router registered")
+app.include_router(admin.router, prefix="/api")
+logger.info("Admin router registered")
 
 # Root endpoint
 @app.get("/")

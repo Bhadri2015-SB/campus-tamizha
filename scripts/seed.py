@@ -1,5 +1,16 @@
 """
 Seed script to populate database with initial data
+
+IMPORTANT: This script has been migrated to API endpoints for better control.
+Instead of running this script directly, use the following API endpoints:
+
+1. Seed database (requires authentication):
+   POST /api/admin/seed
+   
+2. Delete mock testimonials (requires authentication):
+   DELETE /api/admin/mock-data/testimonials
+
+For direct seeding via script, use this file. For production, use the API endpoints.
 """
 import sys
 from pathlib import Path
@@ -18,37 +29,51 @@ from app.core.security import get_password_hash
 from app.models.user import User
 from app.models.college import College
 from app.models.testimonial import Testimonial
+from app.models.application import Application
 from app.core.config import settings
+import random
+from datetime import datetime, timedelta
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
 async def seed_admin_user():
     """Create admin user if not exists"""
     async with AsyncSessionLocal() as session:
-        statement = select(User).where(User.username == settings.ADMIN_USERNAME)
-        result = await session.execute(statement)
-        user = result.scalar_one_or_none()
-        
-        if not user:
-            admin = User(
-                username=settings.ADMIN_USERNAME,
-                email=settings.ADMIN_EMAIL,
-                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-                is_active=True,
-                is_superuser=True
-            )
-            session.add(admin)
-            await session.commit()
-            print(f"✓ Admin user created: {settings.ADMIN_USERNAME}")
-        else:
-            print(f"✓ Admin user already exists: {settings.ADMIN_USERNAME}")
+        try:
+            statement = select(User).where(User.username == settings.ADMIN_USERNAME)
+            result = await session.execute(statement)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                admin = User(
+                    username=settings.ADMIN_USERNAME,
+                    email=settings.ADMIN_EMAIL,
+                    hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                    is_active=True,
+                    is_superuser=True
+                )
+                session.add(admin)
+                await session.commit()
+                logger.info(f"✓ Admin user created: {settings.ADMIN_USERNAME}")
+                print(f"✓ Admin user created: {settings.ADMIN_USERNAME}")
+            else:
+                logger.info(f"✓ Admin user already exists: {settings.ADMIN_USERNAME}")
+                print(f"✓ Admin user already exists: {settings.ADMIN_USERNAME}")
+        except Exception as e:
+            logger.error(f"Error creating admin user: {str(e)}")
+            print(f"✗ Error creating admin user: {str(e)}")
+            await session.rollback()
+            raise
 
 
 async def seed_colleges():
-    """Seed Tamil Nadu colleges from colleges_data.json"""
+    """Seed Tamil Nadu colleges from colleges_data.json (avoids duplicates)"""
     try:
         # Load colleges data from JSON file
         colleges_json_path = project_root / "colleges_data.json"
@@ -86,7 +111,7 @@ async def seed_colleges():
                         skipped_count += 1
                         continue
                     
-                    # Check if college already exists
+                    # Check if college already exists (avoid duplicate)
                     statement = select(College).where(College.aishe_code == aishe_code)
                     result = await session.execute(statement)
                     existing = result.scalar_one_or_none()
@@ -160,7 +185,7 @@ async def seed_colleges():
 
 
 async def seed_testimonials():
-    """Seed testimonials"""
+    """Seed sample testimonials (avoids duplicates)"""
     testimonials_data = [
         {
             "quote": "campus Tamizha made my admission process so smooth! The support team was incredibly helpful.",
@@ -207,39 +232,170 @@ async def seed_testimonials():
     ]
     
     async with AsyncSessionLocal() as session:
-        # Check if testimonials exist
-        statement = select(Testimonial)
-        result = await session.execute(statement)
-        existing = result.scalars().all()
-        
-        if not existing:
+        try:
+            added_count = 0
+            skipped_count = 0
+            
             for testimonial_data in testimonials_data:
-                testimonial = Testimonial(**testimonial_data)
-                session.add(testimonial)
-                print(f"✓ Added testimonial from: {testimonial_data['name']}")
+                # Check if testimonial exists (by name and college to avoid duplicates)
+                statement = select(Testimonial).where(
+                    Testimonial.name == testimonial_data['name'],
+                    Testimonial.college == testimonial_data['college']
+                )
+                result = await session.execute(statement)
+                existing = result.scalar_one_or_none()
+                
+                if not existing:
+                    testimonial = Testimonial(**testimonial_data)
+                    session.add(testimonial)
+                    added_count += 1
+                    logger.info(f"✓ Added testimonial from: {testimonial_data['name']}")
+                    print(f"✓ Added testimonial from: {testimonial_data['name']}")
+                else:
+                    skipped_count += 1
+                    logger.info(f"⊘ Skipped existing testimonial: {testimonial_data['name']}")
             
             await session.commit()
-            print(f"\n✓ Total testimonials seeded: {len(testimonials_data)}")
-        else:
-            print(f"\n✓ Testimonials already exist ({len(existing)} found)")
+            print(f"\n✓ Testimonials seeding completed!")
+            print(f"  - Added: {added_count}")
+            print(f"  - Skipped (already exist): {skipped_count}")
+            logger.info(f"Testimonials added: {added_count}, skipped: {skipped_count}")
+        except Exception as e:
+            logger.error(f"Error seeding testimonials: {str(e)}")
+            print(f"✗ Error seeding testimonials: {str(e)}")
+            await session.rollback()
+            raise
+
+
+async def seed_applications():
+    """Seed 25 mock applications (avoids duplicates)"""    
+    # Sample data for generating mock applications
+    first_names = ["Arun", "Priya", "Karthik", "Deepa", "Rajesh", "Lakshmi", "Vijay", "Sowmya", 
+                   "Suresh", "Divya", "Kumar", "Meena", "Ravi", "Saranya", "Ganesh", "Kavitha",
+                   "Naveen", "Nithya", "Prakash", "Ramya", "Senthil", "Sneha", "Vignesh", "Yamini", "Balaji"]
+    
+    cities = ["Chennai", "Coimbatore", "Madurai", "Trichy", "Salem", "Tirunelveli", "Erode", "Vellore"]
+    districts = ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Tirunelveli", "Erode", "Vellore"]
+    schools = ["St. Mary's School", "DAV Public School", "National Higher Secondary School", 
+               "Bharathi Vidya Bhavan", "Government Higher Secondary School", "Kendriya Vidyalaya"]
+    boards = ["State Board", "CBSE", "ICSE", "Matriculation"]
+    colleges_list = ["Anna University", "PSG College of Technology", "SSN College of Engineering",
+                     "Thiagarajar College of Engineering", "Coimbatore Institute of Technology"]
+    courses_list = ["Computer Science Engineering", "Mechanical Engineering", "Electronics and Communication Engineering",
+                    "Civil Engineering", "Electrical and Electronics Engineering", "Information Technology"]
+    statuses = ["pending", "in_progress", "approved", "rejected"]
+    
+    async with AsyncSessionLocal() as session:
+        try:
+            added_count = 0
+            skipped_count = 0
+            
+            for i in range(25):
+                # Generate unique email
+                email = f"student{i+1}@example.com"
+                
+                # Check if application with this email exists (avoid duplicates)
+                statement = select(Application).where(Application.email == email)
+                result = await session.execute(statement)
+                existing = result.scalar_one_or_none()
+                
+                if existing:
+                    skipped_count += 1
+                    logger.info(f"⊘ Skipped existing application: {email}")
+                    continue
+                
+                # Generate random birth date (18-22 years old)
+                age_days = random.randint(18*365, 22*365)
+                dob = (datetime.now() - timedelta(days=age_days)).strftime("%Y-%m-%d")
+                
+                # Generate random percentages
+                sslc_pct = round(random.uniform(75.0, 98.0), 2)
+                hsc_pct = round(random.uniform(75.0, 98.0), 2)
+                
+                # Randomly select 1-3 colleges and courses
+                num_colleges = random.randint(1, 3)
+                selected_colleges = random.sample(colleges_list, num_colleges)
+                selected_courses = random.sample(courses_list, num_colleges)
+                
+                application = Application(
+                    name=first_names[i],
+                    email=email,
+                    mobile=f"98{random.randint(10000000, 99999999)}",
+                    city=random.choice(cities),
+                    dob=dob,
+                    gender=random.choice(["Male", "Female"]),
+                    sslc_percentage=sslc_pct,
+                    hsc_percentage=hsc_pct,
+                    school_name=random.choice(schools),
+                    district=random.choice(districts),
+                    board=random.choice(boards),
+                    college=selected_colleges,
+                    course=selected_courses,
+                    notes=f"Mock application {i+1} - Sample data for testing",
+                    status=random.choice(statuses),
+                    admin_notes=None if random.random() > 0.5 else "Sample admin note"
+                )
+                
+                session.add(application)
+                added_count += 1
+                logger.info(f"✓ Added application from: {first_names[i]} ({email})")
+                print(f"✓ Added application {i+1}/25: {first_names[i]}")
+            
+            await session.commit()
+            print(f"\n✓ Applications seeding completed!")
+            print(f"  - Added: {added_count}")
+            print(f"  - Skipped (already exist): {skipped_count}")
+            logger.info(f"Applications added: {added_count}, skipped: {skipped_count}")
+        except Exception as e:
+            logger.error(f"Error seeding applications: {str(e)}")
+            print(f"✗ Error seeding applications: {str(e)}")
+            await session.rollback()
+            raise
 
 
 async def main():
     """Run all seed functions"""
     try:
-        print("\n🌱 Starting database seeding...\n")
-        print("="*50)
+        print("\n" + "="*70)
+        print("🌱 CAMPUS TAMIZHA - DATABASE SEEDING")
+        print("="*70)
+        print("\nNote: API endpoints are now available for seeding:")
+        print("  - POST /api/admin/seed (requires authentication)")
+        print("  - DELETE /api/admin/mock-data/testimonials (requires authentication)")
+        print("  - DELETE /api/admin/mock-data/applications (requires authentication)")
+        print("\nProceeding with direct database seeding...\n")
+        print("="*70)
         
+        logger.info("Starting database seeding")
+        
+        # Seed admin user
+        print("\n[1/4] Seeding Admin User...")
         await seed_admin_user()
-        print("="*50)
+        print("="*70)
         
+        # Seed colleges
+        print("\n[2/4] Seeding Colleges from JSON...")
         await seed_colleges()
-        print("="*50)
+        print("="*70)
         
+        # Seed testimonials
+        print("\n[3/4] Seeding Testimonials...")
         await seed_testimonials()
-        print("="*50)
+        print("="*70)
         
-        print("\n✅ Database seeding completed successfully!\n")
+        # Seed applications
+        print("\n[4/4] Seeding Mock Applications...")
+        await seed_applications()
+        print("="*70)
+        
+        print("\n✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!")
+        print("="*70 + "\n")
+        logger.info("Database seeding completed successfully")
+    
+    except Exception as e:
+        logger.error(f"Fatal error during seeding: {str(e)}", exc_info=True)
+        print(f"\n❌ SEEDING FAILED: {str(e)}\n")
+        raise
     
     finally:
         # Dispose of the engine and close all connections

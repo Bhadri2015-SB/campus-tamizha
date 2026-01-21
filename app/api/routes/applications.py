@@ -28,6 +28,7 @@ class PaginatedApplicationResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    status_counts: dict = {}  # Dict with status as key and count as value
 
 
 
@@ -122,6 +123,11 @@ async def list_applications(
             session, skip, page_size, sort_by, order, name, location, application_status, start_date, end_date
         )
         
+        # Get status counts (apply same filters except status filter for overall counts)
+        status_counts = await db_crud.get_application_status_counts(
+            # session, name, location, start_date, end_date
+        )
+        
         # Calculate total pages
         total_pages = (total + page_size - 1) // page_size if total > 0 else 0
         
@@ -130,7 +136,8 @@ async def list_applications(
             total=total,
             page=page,
             page_size=page_size,
-            total_pages=total_pages
+            total_pages=total_pages,
+            status_counts=status_counts
         )
     except HTTPException:
         raise

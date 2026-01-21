@@ -134,6 +134,79 @@ async def get_applications(
         raise
 
 
+async def get_application_status_counts(
+    session: AsyncSession,
+    name: Optional[str] = None,
+    location: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> dict:
+    """Get count of applications grouped by status with optional filters
+    
+    Args:
+        session: Database session
+        name: Filter by name (partial match)
+        location: Filter by city/location (partial match)
+        start_date: Filter from date (format: YYYY-MM-DD)
+        end_date: Filter until date (format: YYYY-MM-DD)
+    
+    Returns:
+        dict: Dictionary with status as key and count as value
+    """
+    try:
+        from sqlalchemy import func
+        
+        # Build base query
+        statement = select(Application.status, func.count(Application.id)).group_by(Application.status)
+        
+        # Apply same filters as get_applications
+        filters = []
+        
+        if name:
+            filters.append(Application.name.ilike(f"{name}%"))
+        
+        if location:
+            filters.append(Application.city.ilike(f"{location}%"))
+        
+        if start_date:
+            try:
+                start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+                filters.append(Application.created_at >= start_datetime)
+            except ValueError:
+                logger.error(f"Invalid start_date format: {start_date}")
+                raise ValueError(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
+        
+        if end_date:
+            try:
+                end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
+                end_datetime = end_datetime.replace(hour=23, minute=59, second=59)
+                filters.append(Application.created_at <= end_datetime)
+            except ValueError:
+                logger.error(f"Invalid end_date format: {end_date}")
+                raise ValueError(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
+        
+        # Apply filters if any
+        if filters:
+            for filter_condition in filters:
+                statement = statement.where(filter_condition)
+        
+        # Execute query
+        result = await session.execute(statement)
+        status_counts = {status: count for status, count in result.all()}
+        
+        return status_counts
+        
+    except ValueError as e:
+        logger.error(f"Validation error in get_application_status_counts: {str(e)}")
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Error fetching application status counts: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error fetching application status counts: {str(e)}")
+        raise
+
+
 async def get_application_by_id(
     session: AsyncSession, 
     application_id: int

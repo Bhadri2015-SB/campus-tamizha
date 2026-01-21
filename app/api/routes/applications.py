@@ -125,7 +125,7 @@ async def list_applications(
         
         # Get status counts (apply same filters except status filter for overall counts)
         status_counts = await db_crud.get_application_status_counts(
-            # session, name, location, start_date, end_date
+            session#, name, location, start_date, end_date
         )
         
         # Calculate total pages

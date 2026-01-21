@@ -84,70 +84,70 @@ async def seed_database(
             results["admin_created"] = 1
             logger.info(f"Created admin user: {settings.ADMIN_USERNAME}")
         
-        # 2. Seed colleges from JSON
-        project_root = Path(__file__).parent.parent.parent.parent
-        colleges_json_path = project_root / "colleges_data.json"
+        # # 2. Seed colleges from JSON
+        # project_root = Path(__file__).parent.parent.parent.parent
+        # colleges_json_path = project_root / "colleges_data.json"
         
-        if colleges_json_path.exists():
-            with open(colleges_json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        # if colleges_json_path.exists():
+        #     with open(colleges_json_path, 'r', encoding='utf-8') as f:
+        #         data = json.load(f)
             
-            institutions = data.get('institutionDirectoryDto', [])
-            logger.info(f"Found {len(institutions)} colleges in JSON file")
+        #     institutions = data.get('institutionDirectoryDto', [])
+        #     logger.info(f"Found {len(institutions)} colleges in JSON file")
             
-            for college_data in institutions:
-                try:
-                    aishe_code = college_data.get('aisheCode')
+        #     for college_data in institutions:
+        #         try:
+        #             aishe_code = college_data.get('aisheCode')
                     
-                    if not aishe_code:
-                        results["errors"] += 1
-                        continue
+        #             if not aishe_code:
+        #                 results["errors"] += 1
+        #                 continue
                     
-                    # Check if college exists
-                    statement = select(College).where(College.aishe_code == aishe_code)
-                    result = await session.execute(statement)
-                    existing = result.scalar_one_or_none()
+        #             # Check if college exists
+        #             statement = select(College).where(College.aishe_code == aishe_code)
+        #             result = await session.execute(statement)
+        #             existing = result.scalar_one_or_none()
                     
-                    if existing:
-                        results["colleges_skipped"] += 1
-                        continue
+        #             if existing:
+        #                 results["colleges_skipped"] += 1
+        #                 continue
                     
-                    # Create college
-                    college = College(
-                        aishe_code=aishe_code,
-                        name=college_data.get('name', ''),
-                        address=college_data.get('address1'),
-                        state_name=college_data.get('stateName'),
-                        district_name=college_data.get('districtName'),
-                        website=college_data.get('webSite'),
-                        management=college_data.get('manegement'),
-                        year_of_establishment=college_data.get('yearOfEstablishment'),
-                        institution_type=college_data.get('institutionType'),
-                        specialized_in=college_data.get('specializedIn'),
-                        university_id=college_data.get('universityId'),
-                        university_name=college_data.get('universityName'),
-                        university_type=college_data.get('universityType'),
-                        location=college_data.get('location'),
-                        active=True
-                    )
+        #             # Create college
+        #             college = College(
+        #                 aishe_code=aishe_code,
+        #                 name=college_data.get('name', ''),
+        #                 address=college_data.get('address1'),
+        #                 state_name=college_data.get('stateName'),
+        #                 district_name=college_data.get('districtName'),
+        #                 website=college_data.get('webSite'),
+        #                 management=college_data.get('manegement'),
+        #                 year_of_establishment=college_data.get('yearOfEstablishment'),
+        #                 institution_type=college_data.get('institutionType'),
+        #                 specialized_in=college_data.get('specializedIn'),
+        #                 university_id=college_data.get('universityId'),
+        #                 university_name=college_data.get('universityName'),
+        #                 university_type=college_data.get('universityType'),
+        #                 location=college_data.get('location'),
+        #                 active=True
+        #             )
                     
-                    session.add(college)
-                    results["colleges_added"] += 1
+        #             session.add(college)
+        #             results["colleges_added"] += 1
                     
-                    # Commit in batches
-                    if results["colleges_added"] % 500 == 0:
-                        await session.commit()
-                        logger.info(f"Committed batch: {results['colleges_added']} colleges")
+        #             # Commit in batches
+        #             if results["colleges_added"] % 500 == 0:
+        #                 await session.commit()
+        #                 logger.info(f"Committed batch: {results['colleges_added']} colleges")
                 
-                except Exception as e:
-                    results["errors"] += 1
-                    logger.error(f"Error processing college: {str(e)}")
-                    continue
+        #         except Exception as e:
+        #             results["errors"] += 1
+        #             logger.error(f"Error processing college: {str(e)}")
+        #             continue
             
-            await session.commit()
-            logger.info(f"Colleges seeding completed: {results['colleges_added']} added, {results['colleges_skipped']} skipped")
-        else:
-            logger.warning(f"colleges_data.json not found at {colleges_json_path}")
+        #     await session.commit()
+        #     logger.info(f"Colleges seeding completed: {results['colleges_added']} added, {results['colleges_skipped']} skipped")
+        # else:
+        #     logger.warning(f"colleges_data.json not found at {colleges_json_path}")
         
         # 3. Seed testimonials
         testimonials_data = [

@@ -39,9 +39,10 @@ async def get_applications(
     order: str = "desc",
     name: Optional[str] = None,
     location: Optional[str] = None,
+    status: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
-) -> List[Application]:
+) -> tuple[List[Application], int]:
     """Get all applications with pagination, sorting, and filtering
     
     Args:
@@ -51,26 +52,40 @@ async def get_applications(
         sort_by: Field to sort by
         order: Sort order (asc or desc)
         name: Filter by name (partial match)
-        location: Filter by city/location (exact match)
+        location: Filter by city/location (partial match)
+        status: Filter by application status
         start_date: Filter from date (format: YYYY-MM-DD)
         end_date: Filter until date (format: YYYY-MM-DD)
+    
+    Returns:
+        tuple: (list of applications, total count)
     """
     try:
+        # Build base query
         statement = select(Application)
+        count_statement = select(Application)
         
         # Apply name filter if provided
         if name:
-            statement = statement.where(Application.name.ilike(f"%{name}%"))
+            statement = statement.where(Application.name.ilike(f"{name}%"))
+            count_statement = count_statement.where(Application.name.ilike(f"{name}%"))
         
         # Apply location filter if provided
         if location:
-            statement = statement.where(Application.city.ilike(f"%{location}%"))
+            statement = statement.where(Application.city.ilike(f"{location}%"))
+            count_statement = count_statement.where(Application.city.ilike(f"{location}%"))
+        
+        # Apply status filter if provided
+        if status:
+            statement = statement.where(Application.status == status)
+            count_statement = count_statement.where(Application.status == status)
         
         # Apply date range filters if provided
         if start_date:
             try:
                 start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
                 statement = statement.where(Application.created_at >= start_datetime)
+                count_statement = count_statement.where(Application.created_at >= start_datetime)
             except ValueError:
                 logger.error(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
                 raise ValueError(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
@@ -81,9 +96,15 @@ async def get_applications(
                 # Set to end of day
                 end_datetime = end_datetime.replace(hour=23, minute=59, second=59)
                 statement = statement.where(Application.created_at <= end_datetime)
+                count_statement = count_statement.where(Application.created_at <= end_datetime)
             except ValueError:
                 logger.error(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
                 raise ValueError(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
+        
+        # Get total count
+        from sqlalchemy import func
+        count_result = await session.execute(select(func.count()).select_from(count_statement.subquery()))
+        total = count_result.scalar()
         
         # Apply sorting
         sort_column = getattr(Application, sort_by, Application.created_at)
@@ -96,7 +117,9 @@ async def get_applications(
         statement = statement.offset(skip).limit(limit)
         
         result = await session.execute(statement)
-        return result.scalars().all()
+        applications = result.scalars().all()
+        
+        return applications, total
     except AttributeError as e:
         logger.error(f"Invalid sort field: {sort_by}")
         raise ValueError(f"Invalid sort field: {sort_by}")
@@ -250,7 +273,7 @@ async def get_colleges(
         
         # Apply search filter (searches in college name only)
         if search:
-            search_filter = f"%{search}%"
+            search_filter = f"{search}%"
             statement = statement.where(College.name.ilike(search_filter))
             count_statement = count_statement.where(College.name.ilike(search_filter))
         

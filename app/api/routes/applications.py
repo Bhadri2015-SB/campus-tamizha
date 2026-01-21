@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from pydantic import BaseModel
 from app.db.database import get_session
 from app.core.deps import get_current_user, get_current_superuser
 from app.core.config import settings
@@ -20,6 +21,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
 
+class PaginatedApplicationResponse(BaseModel):
+    """Paginated response for applications"""
+    items: List[ApplicationResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 
 @router.post("/", response_model=ApplicationResponse)
 async def create_application(
@@ -28,7 +38,20 @@ async def create_application(
 ):
     """Create a new application"""
     try:
-        return await db_crud.create_application(session, application_data.model_dump())
+        # Create the application
+        application = await db_crud.create_application(session, application_data.model_dump())
+        
+        # Create initial status history entry for "pending" status
+        await db_crud.create_status_history(
+            session=session,
+            application_id=application.id,
+            status="pending",
+            admin_email="system@campustamizha.com",
+            admin_name="System",
+            notes="Application submitted"
+        )
+        
+        return application
     except IntegrityError as e:
         logger.error(f"Database integrity error while creating application: {str(e)}")
         raise HTTPException(
@@ -49,28 +72,30 @@ async def create_application(
         )
 
 
-@router.get("/", response_model=List[ApplicationResponse])
+@router.get("/", response_model=PaginatedApplicationResponse)
 async def list_applications(
-    skip: int = 0,
-    limit: int = 10,
-    sort_by: str = "created_at",
-    order: str = "desc",
-    name: str = None,
-    location: str = None,
-    start_date: str = None,
-    end_date: str = None,
+    page: int = Query(1, ge=1, description="Page number (starts from 1)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    order: str = Query("desc", description="Sort order (asc or desc)"),
+    name: Optional[str] = Query(None, description="Filter by name (partial match)"),
+    location: Optional[str] = Query(None, description="Filter by city/location"),
+    application_status: Optional[str] = Query(None, description="Filter by application status"),
+    start_date: Optional[str] = Query(None, description="Filter applications from this date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Filter applications until this date (YYYY-MM-DD)"),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_superuser)
 ):
-    """List all applications (admin only) with sorting and filtering
+    """List all applications (admin only) with pagination, sorting and filtering
     
     Args:
-        skip: Number of records to skip (offset)
-        limit: Maximum number of records to return
+        page: Page number (starts from 1)
+        page_size: Number of items per page
         sort_by: Field to sort by (id, name, email, city, status, created_at, etc.)
         order: Sort order (asc or desc)
         name: Filter by name (partial match, case-insensitive)
-        location: Filter by city/location (exact match, case-insensitive)
+        location: Filter by city/location (partial match, case-insensitive)
+        application_status: Filter by application status
         start_date: Filter applications from this date (format: YYYY-MM-DD)
         end_date: Filter applications until this date (format: YYYY-MM-DD)
     """
@@ -82,8 +107,30 @@ async def list_applications(
                 detail="Order must be 'asc' or 'desc'"
             )
         
-        return await db_crud.get_applications(
-            session, skip, limit, sort_by, order, name, location, start_date, end_date
+        # Validate status if provided
+        if application_status and application_status not in settings.APPLICATION_STATUS_OPTIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(settings.APPLICATION_STATUS_OPTIONS)}"
+            )
+        
+        # Calculate skip based on page
+        skip = (page - 1) * page_size
+        
+        # Fetch applications with filters
+        applications, total = await db_crud.get_applications(
+            session, skip, page_size, sort_by, order, name, location, application_status, start_date, end_date
+        )
+        
+        # Calculate total pages
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        
+        return PaginatedApplicationResponse(
+            items=applications,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages
         )
     except HTTPException:
         raise
